@@ -1,0 +1,117 @@
+
+{
+  "message": "init",
+  "protocol": "json",
+  "name": "Yamaha MusicCast RX-V581",
+  "vendorname": "Yamaha",
+  "modelname": "RX-V581",
+  "colorclass": 8,
+  "output": "basic",
+  "group": 8,
+  "oemmodelguid": "gs1:(01)1234567890123",
+
+  "states": {
+    "Eingeschaltet": {
+      "type": "enumeration",
+      "description": "Eingeschaltet",
+      "values": ["!Aus", "Ein"]
+    },
+    "Lautstärke": {
+      "type": "numeric",
+      "description": "Lautstärke",
+      "min": 0,
+      "max": 255,
+      "resolution": 1
+    },
+    "Stumm": {
+      "type": "enumeration",
+      "description": "Stumm",
+      "values": ["!Aus", "Ein"]
+    },
+    "Input": {
+      "type": "enumeration",
+      "description": "Eingangsquelle",
+      "values": [
+        "!Airplay",
+        "Bluetooth",
+        "Spotify",
+        "Net radio",
+        "USB",
+        "AV1",
+        "AV2",
+        "AV3",
+        "AV4",
+        "Audio1",
+        "Audio2",
+        "HDMI1",
+        "HDMI2",
+        "HDMI3",
+        "HDMI4",
+        "Tuner",
+        "AUX"
+      ]
+    }
+  },
+
+  "events": {
+    "Inputwechsel": {
+      "description": "Eingangsquelle geändert",
+      "type": "boolean"
+    },
+    "Lautstärke geändert": {
+      "description": "Lautstärke geändert",
+      "type": "boolean"
+    },
+    "Mute": {
+      "description": "Stummschaltung aktiviert",
+      "type": "boolean"
+    },
+    "Unmute": {
+      "description": "Stummschaltung deaktiviert",
+      "type": "boolean"
+    },
+    "Eingeschaltet": {
+      "description": "MusicCast eingeschaltet",
+      "type": "boolean"
+    },
+    "Ausgeschaltet": {
+      "description": "MusicCast ausgeschaltet",
+      "type": "boolean"
+    }
+  },
+
+  "dynamicactions": {
+    "ActTurnOn": {
+      "title": "01-Einschalten",
+      "description": "Einschalten"
+    },
+    "ActTurnOff": {
+      "title": "02-Ausschalten",
+      "description": "Ausschalten"
+    },
+    "ActVolumeUp": {
+      "title": "03-Lauter",
+      "description": "Lautstärke erhöhen"
+    },
+    "ActVolumeDown": {
+      "title": "04-Leiser",
+      "description": "Lautstärke verringern"
+    },
+    "ActMuteOn": {
+      "title": "05-Stumm ein",
+      "description": "Stummschaltung aktivieren"
+    },
+    "ActMuteOff": {
+      "title": "06-Stumm aus",
+      "description": "Stummschaltung deaktivieren"
+    },
+    "ActInputBluetooth": {
+      "title": "07-Input Bluetooth",
+      "description": "Bluetooth auswählen"
+    },
+    "ActInputAirplay": {
+      "title": "08-Input Airplay",
+      "description": "Airplay auswählen"
+    }
+  }
+}

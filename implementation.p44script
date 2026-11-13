@@ -1,0 +1,433 @@
+/*
+ * Yamaha MusicCast 
+ * P44Script Implementation
+ *
+ * 8 Dynamic Actions
+ * 4 States
+ * 6 Events
+ *
+ * - Polling alle 10 Sekunden
+ * - States nur bei Wertänderungen übertragen
+ * - Initiale Übertragung aller gültigen States
+ * - Events nur bei echten Zustandsänderungen
+ * - Sofortiges Polling nach Actions
+ * - Zwei Nachkontrollen nach Actions
+ * - Asynchrone Actions mit confirmAction
+ */
+
+// ====================================
+// Konfiguration
+// ====================================
+var yamahaIP = "192.168.1.1";   //ANPASSEN !!
+var zone = "main";
+
+var baseURL = "http://" + yamahaIP + "/YamahaExtendedControl/v1/";
+
+// ====================================
+// Globale Variablen
+// ====================================
+var busy = false;
+var pollCounter = 0;
+
+// Letzte erfolgreich übertragene Werte.
+// null bedeutet: noch nicht initialisiert.
+var lastPower = null;
+var lastVolume = null;
+var lastMute = null;
+var lastInput = null;
+
+// ====================================
+// Yamaha HTTP API
+// ====================================
+function yamahaGet(path) {
+  var response = geturl(baseURL + path, 5);
+  return json(response);
+}
+
+// ====================================
+// Yamaha Befehl ausführen
+// ====================================
+function yamahaCommand(cmd) {
+  var r = yamahaGet(zone + "/" + cmd);
+
+  if (!isvalid(r) || r.response_code != 0) {
+    throw "Yamaha API Fehler";
+  }
+}
+
+// ====================================
+// Input Mapping
+// ====================================
+function mapInput(input) {
+  var inputs = {
+    "airplay": "Airplay",
+    "bluetooth": "Bluetooth",
+    "spotify": "Spotify",
+    "net_radio": "Net radio",
+    "usb": "USB",
+    "av1": "AV1",
+    "av2": "AV2",
+    "av3": "AV3",
+    "av4": "AV4",
+    "audio1": "Audio1",
+    "audio2": "Audio2",
+    "hdmi1": "HDMI1",
+    "hdmi2": "HDMI2",
+    "hdmi3": "HDMI3",
+    "hdmi4": "HDMI4",
+    "tuner": "Tuner",
+    "aux": "AUX"
+  };
+
+  return inputs[input];
+}
+
+// ====================================
+// Status aktualisieren
+// ====================================
+function updateStatus() {
+  try {
+    var s = yamahaGet(zone + "/getStatus");
+
+    if (!isvalid(s) || s.response_code != 0) {
+      throw "Yamaha getStatus fehlgeschlagen";
+    }
+
+    log(6, "MusicCast RAW power=%s volume=%s mute=%s input=%s", s.power, s.volume, s.mute, s.input);
+
+    // --------------------------------
+    // Eingeschaltet
+    // --------------------------------
+    if (s.power == "on" ||
+        s.power == "standby") {
+
+      var power = "Aus";
+
+      if (s.power == "on") {
+        power = "Ein";
+      }
+
+      if (lastPower != power) {
+        // State übertragen
+        message({
+          message: "pushNotification",
+          statechange: {
+            Eingeschaltet: power
+          }
+        });
+
+        log(5, "MusicCast State Eingeschaltet: %s", power);
+
+        // Event nur bei echtem Wechsel
+        if (lastPower != null) {
+          if (power == "Ein") {
+            message({
+              message: "pushNotification",
+              events: ["Eingeschaltet"]
+            });
+
+            log(5, "MusicCast EVENT Eingeschaltet");
+          } else {
+            message({
+              message: "pushNotification",
+              events: ["Ausgeschaltet"]
+            });
+
+            log(5, "MusicCast EVENT Ausgeschaltet");
+          }
+        }
+
+        lastPower = power;
+      }
+    }
+
+    // --------------------------------
+    // Lautstärke
+    // --------------------------------
+    if (isvalid(s.volume)) {
+      var volume = s.volume;
+
+      if (volume >= 0 && volume <= 255) {
+        if (lastVolume != volume) {
+          // Wichtig:
+          // Lautstärke ist ein numeric State.
+          // Numerischen Wert direkt übertragen.
+          var volumeState = {};
+          volumeState["Lautstärke"] = volume;
+
+          message({
+            message: "pushNotification",
+            statechange: volumeState
+          });
+
+          log(5, "MusicCast State Lautstärke: %s", volume);
+
+          // Event nur bei echter Änderung
+          if (lastVolume != null) {
+            message({
+              message: "pushNotification",
+              events: ["Lautstärke geändert"]
+            });
+
+            log(5, "MusicCast EVENT Lautstärke: %s -> %s", lastVolume, volume);
+          }
+
+          lastVolume = volume;
+        }
+      } else {
+        log(3, "MusicCast Lautstärke ungültig: %s", volume);
+      }
+    }
+
+    // --------------------------------
+    // Stumm
+    // --------------------------------
+    if (isvalid(s.mute)) {
+      var mute = "Aus";
+
+      if (s.mute == true) {
+        mute = "Ein";
+      }
+
+      if (lastMute != mute) {
+        message({
+          message: "pushNotification",
+          statechange: {
+            Stumm: mute
+          }
+        });
+
+        log(5, "MusicCast State Stumm: %s", mute);
+
+        if (lastMute != null) {
+          if (mute == "Ein") {
+            message({
+              message: "pushNotification",
+              events: ["Mute"]
+            });
+
+            log(5, "MusicCast EVENT Mute");
+          } else {
+            message({
+              message: "pushNotification",
+              events: ["Unmute"]
+            });
+
+            log(5, "MusicCast EVENT Unmute");
+          }
+        }
+
+        lastMute = mute;
+      }
+    }
+
+    // --------------------------------
+    // Input
+    // --------------------------------
+    if (isvalid(s.input)) {
+      var input = mapInput(s.input);
+
+      if (isvalid(input)) {
+        if (lastInput != input) {
+          message({
+            message: "pushNotification",
+            statechange: {
+              Input: input
+            }
+          });
+
+          log(5, "MusicCast State Input: %s", input);
+
+          if (lastInput != null) {
+            message({
+              message: "pushNotification",
+              events: ["Inputwechsel"]
+            });
+
+            log(5, "MusicCast EVENT Input: %s -> %s", lastInput, input);
+          }
+
+          lastInput = input;
+        }
+      } else {
+        log(4, "MusicCast unbekannter Input: %s", s.input);
+      }
+    }
+
+    // --------------------------------
+    // API Status OK
+    // --------------------------------
+    message({
+      message: "opstate",
+      level: 100,
+      text: "MusicCast API OK"
+    });
+
+    return true;
+  } catch as e {
+    log(3, "MusicCast Statusfehler: %s", e);
+
+    message({
+      message: "opstate",
+      level: 0,
+      text: "MusicCast API Fehler"
+    });
+
+    return false;
+  }
+}
+
+// ====================================
+// Dynamic Action Mapping
+// ====================================
+function getActionCommand(action)
+{
+  if (action == "ActTurnOn")
+    return "setPower?power=on";
+
+  if (action == "ActTurnOff")
+    return "setPower?power=standby";
+
+  if (action == "ActVolumeUp")
+    return "setVolume?volume=up";
+
+  if (action == "ActVolumeDown")
+    return "setVolume?volume=down";
+
+  if (action == "ActMuteOn")
+    return "setMute?enable=true";
+
+  if (action == "ActMuteOff")
+    return "setMute?enable=false";
+
+  if (action == "ActInputBluetooth")
+    return "setInput?input=bluetooth";
+
+  if (action == "ActInputAirplay")
+    return "setInput?input=airplay";
+
+  return null;
+}
+
+// ====================================
+// Dynamic Actions
+// ====================================
+on (message()) as m {
+  if (m.message == "invokeAction") {
+    var cmd = getActionCommand(m.action);
+
+    // --------------------------------
+    // Unbekannte Action
+    // --------------------------------
+    if (cmd == null) {
+      message({
+        message: "confirmAction",
+        action: m.action,
+        errorcode: 1,
+        errortext: "Unbekannte MusicCast Aktion"
+      });
+
+    }
+
+    // --------------------------------
+    // Gerät beschäftigt
+    // --------------------------------
+    else if (busy) {
+      message({
+        message: "confirmAction",
+        action: m.action,
+        errorcode: 1,
+        errortext: "MusicCast beschäftigt"
+      });
+
+    }
+
+    // --------------------------------
+    // Action annehmen
+    // --------------------------------
+    else {
+      busy = true;
+
+      // Sofortige Bestätigung an DS
+      message({
+        message: "confirmAction",
+        action: m.action,
+        errorcode: 0
+      });
+
+      log(5, "MusicCast Action angenommen: %s", m.action);
+
+      // --------------------------------
+      // Asynchrone Ausführung
+      // --------------------------------
+      concurrent passing command=cmd, actionId=m.action {
+        try {
+          // Yamaha Befehl
+          yamahaCommand(command);
+
+          log(5, "MusicCast Action ausgeführt: %s", actionId);
+
+          // ----------------------------
+          // Sofortiges Statusupdate
+          // ----------------------------
+          log(6, "MusicCast Sofortpoll nach Action");
+
+          updateStatus();
+
+          // ----------------------------
+          // Nachkontrolle nach 1 Sekunde
+          // ----------------------------
+          delay(1);
+          updateStatus();
+
+          // ----------------------------
+          // Zweite Nachkontrolle
+          // ----------------------------
+          delay(2);
+          updateStatus();
+
+          log(5, "MusicCast Action abgeschlossen: %s", actionId);
+        } catch as e {
+          log(3, "MusicCast Action Fehler (%s): %s", actionId, e);
+
+          message({
+            message: "opstate", level: 0, text: "MusicCast Action fehlgeschlagen"
+          });
+        }
+
+        busy = false;
+      }
+    }
+  }
+}
+
+// ====================================
+// Zyklisches Polling
+// Alle 10 Sekunden
+// ====================================
+on (every(10)) {
+  pollCounter++;
+
+  if (!busy) {
+    busy = true;
+
+    log(6, "MusicCast Poll #%s gestartet", pollCounter);
+
+    updateStatus();
+    busy = false;
+  } else {
+    log(6, "MusicCast Poll #%s übersprungen", pollCounter);
+  }
+}
+
+// ====================================
+// Initialisierung
+// ====================================
+log(5, "Yamaha Receiver MusicCast gestartet");
+
+// Einmalige Initialisierung der States.
+// Wird bei noch unbekannten Werten
+// nicht als Event interpretiert.
+updateStatus();
+
+return true;
